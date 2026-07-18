@@ -35,8 +35,11 @@ export const signupController = async (req, res) => {
         })
 
         if(newUser){
-            generateToken(newUser._id, res);
-            await newUser.save();
+            // generateToken(newUser._id, res);
+            // await newUser.save();
+        
+        const savedUser = await newUser.save();
+        generateToken(savedUser._id, res);
 
             res.status(201).json({
                 _id:newUser._id,
@@ -45,7 +48,7 @@ export const signupController = async (req, res) => {
                 profilePic:newUser.profilePic,
             });
         }
-        // send â welcome email to the user (this part is not implemented in this snippet)
+        // send a welcome email to the user (this part is not implemented in this snippet)
         else{
             res.status(400).json({message: "Invalid user data"});
         }
