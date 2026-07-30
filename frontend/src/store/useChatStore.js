@@ -1,7 +1,7 @@
 import {create} from 'zustand';
 import { axiosInstance } from '../lib/axios';
 
-export const useChatStore = create(()=>({
+export const useChatStore = create((set, get)=>({
     allContacts: [],
     chats: [],
     messages: [],
@@ -9,7 +9,7 @@ export const useChatStore = create(()=>({
     selectedUser:null,
     isUsersLoading: false,
     isMessagesLoading: false,
-    isSoundEnabled: localStorage.getItem("isSoundEnabled") === true,
+    isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) === true,
 
     toggleSound: () => {
         localStorage.setItem("isSoundEnabled", !get().isSoundEnabled)

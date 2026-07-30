@@ -110,8 +110,10 @@ export const updateProfileController = async (req, res) => {
             return res.status(400).json({message: "Profile picture URL is required"});
         }
 
-        const userId= req.user._id; // Assuming the user ID is attached to the request object by the protectedRoute middleware
-        const uploadResponse = await cloudinary.uploader.upload(profilePic);
+        const userId = req.user._id;
+        const uploadResponse = await cloudinary.uploader.upload(profilePic, {
+          resource_type: "auto",
+        });
         const updatedUser = await User.findByIdAndUpdate(userId, {profilePic: uploadResponse.secure_url}, {new:true});
         res.status(200).json(updatedUser);
     } catch (error) {
