@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useAuthStore } from '../store/useAuthStore'
 import BorderAnimatedContainer from '../components/BorderAnimatedContainer';
 import { useChatStore } from '../store/useChatStore'
@@ -11,7 +11,11 @@ import NoConversationPlaceHolder from '../components/NoConversationPlaceHolder'
 
 function ChatPage() {
   const {logout} = useAuthStore();
-  const {activeTab, selectedUser} = useChatStore();
+  const {activeTab, selectedUser, loadChatThemes} = useChatStore();
+
+  useEffect(() => {
+    loadChatThemes();
+  }, [loadChatThemes]);
 
   return (
     <div className='relative w-full max-w-7xl h-[min(90vh,880px)]'>

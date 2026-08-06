@@ -40,3 +40,29 @@
   @apply px-4 py-2 inline-block bg-cyan-500/10 rounded-lg text-cyan-400
   hover:text-cyan-500 text-sm transition-colors;
 }
+
+@keyframes chat-float {
+  0%, 100% {
+    transform: translateY(-12px) rotate(-8deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(12px) rotate(8deg);
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.7;
+  }
+}
+
+.chat-float {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  animation: chat-float var(--float-duration, 8s) ease-in-out infinite;
+  animation-delay: var(--float-delay, 0s);
+}

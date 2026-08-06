@@ -19,6 +19,11 @@ const userSchema = new mongoose.Schema({
         type:String,
         default:"",
     },
+    chatThemes:{
+        type: Map,
+        of: String,
+        default: {},
+    },
 },
 {timestamps:true}
 );

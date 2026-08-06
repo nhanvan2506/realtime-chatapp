@@ -102,3 +102,32 @@ export const getChatPartners = async (req, res) => {
         res.status(500).json({ error: "Internal server error" });
     }
 }
+
+export const getChatThemes = async (req, res) => {
+    try {
+        res.status(200).json(req.user.chatThemes || {});
+    } catch (error) {
+        console.error("Error fetching chat themes:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const setChatTheme = async (req, res) => {
+    try {
+        const { id: chatUserId } = req.params;
+        const { themeId } = req.body;
+
+        if (!themeId) {
+            return res.status(400).json({ message: "Theme id is required" });
+        }
+
+        const user = await User.findById(req.user._id);
+        user.chatThemes.set(chatUserId.toString(), themeId);
+        await user.save();
+
+        res.status(200).json(user.chatThemes);
+    } catch (error) {
+        console.error("Error setting chat theme:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};

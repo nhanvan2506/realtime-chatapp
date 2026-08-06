@@ -12,6 +12,7 @@ export const useChatStore = create((set, get) => ({
     isUsersLoading: false,
     isMessagesLoading: false,
     isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) !== false,
+    chatThemes: {},
 
     toggleSound: () => {
         localStorage.setItem("isSoundEnabled", !get().isSoundEnabled)
@@ -20,6 +21,25 @@ export const useChatStore = create((set, get) => ({
 
     setActiveTab: (tab) => set({ activeTab: tab }),
     setSelectedUser: (selectedUser) => set({ selectedUser }),
+
+    loadChatThemes: async () => {
+        try {
+            const res = await axiosInstance.get("/messages/themes");
+            set({ chatThemes: res.data || {} });
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to load chat themes");
+        }
+    },
+
+    setChatTheme: async (userId, themeId) => {
+        set((state) => ({ chatThemes: { ...state.chatThemes, [userId]: themeId } }));
+
+        try {
+            await axiosInstance.put(`/messages/theme/${userId}`, { themeId });
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to save chat theme");
+        }
+    },
 
     getAllContacts: async () => {
         set({ isUsersLoading: true });
@@ -90,30 +110,29 @@ export const useChatStore = create((set, get) => ({
     },
 
     subscribeToMessage: () => {
-
-        const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-        if (!isMessageSentFromSelectedUser) return;
-
-        const { selectedUser, isSoundEnabled } = get();
-        if (!selectedUser) return;
-
         const socket = useAuthStore.getState().socket;
+        if (!socket) return;
 
         socket.on("newMessage", (newMessage) => {
-            const currentMessages = get().messages;
-            set({ messages: [...currentMessages, newMessage] });
-        })
+            const { selectedUser, messages, isSoundEnabled } = get();
+            const currentMessages = messages;
 
-        if (isSoundEnabled) {
-            const notificationSound = new Audio("/sounds/notification.mp3")
-            notificationSound.currentTime = 0;
-            notificationSound.play().catch((e) => console.log("Audio play failed:", e));
-        }
+            const isMessageSentFromSelectedUser = selectedUser && newMessage.senderId === selectedUser._id;
+            const isDuplicate = currentMessages.some((msg) => msg._id === newMessage._id);
+
+            if (isMessageSentFromSelectedUser && !isDuplicate) {
+                set({ messages: [...currentMessages, newMessage] });
+            } else if (!isMessageSentFromSelectedUser && isSoundEnabled) {
+                const notificationSound = new Audio("/sounds/notification.mp3")
+                notificationSound.currentTime = 0;
+                notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+            }
+        });
     },
 
     unsubscribeFromMessages: () => {
         const socket = useAuthStore.getState().socket;
-        socket.off("newMessage");
+        if (socket) socket.off("newMessage");
     },
 
 }));
