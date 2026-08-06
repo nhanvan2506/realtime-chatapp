@@ -11,11 +11,14 @@ import NoConversationPlaceHolder from '../components/NoConversationPlaceHolder'
 
 function ChatPage() {
   const {logout} = useAuthStore();
-  const {activeTab, selectedUser, loadChatThemes} = useChatStore();
+  const {activeTab, selectedUser, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges} = useChatStore();
 
   useEffect(() => {
     loadChatThemes();
-  }, [loadChatThemes]);
+    subscribeToThemeChanges();
+
+    return () => unsubscribeFromThemeChanges();
+  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges]);
 
   return (
     <div className='relative w-full max-w-7xl h-[min(90vh,880px)]'>

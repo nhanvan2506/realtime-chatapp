@@ -41,6 +41,21 @@ export const useChatStore = create((set, get) => ({
         }
     },
 
+    subscribeToThemeChanges: () => {
+        const socket = useAuthStore.getState().socket;
+        if (!socket) return;
+
+        socket.off("themeChanged");
+        socket.on("themeChanged", ({ userId, themeId }) => {
+            set((state) => ({ chatThemes: { ...state.chatThemes, [userId]: themeId } }));
+        });
+    },
+
+    unsubscribeFromThemeChanges: () => {
+        const socket = useAuthStore.getState().socket;
+        if (socket) socket.off("themeChanged");
+    },
+
     getAllContacts: async () => {
         set({ isUsersLoading: true });
 

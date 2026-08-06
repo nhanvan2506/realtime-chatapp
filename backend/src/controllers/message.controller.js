@@ -121,11 +121,28 @@ export const setChatTheme = async (req, res) => {
             return res.status(400).json({ message: "Theme id is required" });
         }
 
-        const user = await User.findById(req.user._id);
-        user.chatThemes.set(chatUserId.toString(), themeId);
-        await user.save();
+        const currentUser = await User.findById(req.user._id);
+        const chatPartner = await User.findById(chatUserId);
 
-        res.status(200).json(user.chatThemes);
+        if (!currentUser || !chatPartner) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // store the theme on both users so the chat has a shared theme
+        currentUser.chatThemes.set(chatUserId.toString(), themeId);
+        chatPartner.chatThemes.set(req.user._id.toString(), themeId);
+        await Promise.all([currentUser.save(), chatPartner.save()]);
+
+        // notify the other user in real time so their view updates instantly
+        const receiverSocketId = getReceiverSocketId(chatUserId.toString());
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("themeChanged", {
+                userId: req.user._id.toString(),
+                themeId,
+            });
+        }
+
+        res.status(200).json(currentUser.chatThemes);
     } catch (error) {
         console.error("Error setting chat theme:", error);
         res.status(500).json({ message: "Internal server error" });
