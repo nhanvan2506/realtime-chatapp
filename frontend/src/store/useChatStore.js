@@ -9,6 +9,11 @@ export const useChatStore = create((set, get) => ({
     messages: [],
     activeTab: "chats",
     selectedUser: null,
+    selectedGroup: null,
+    groups: [],
+    groupMessages: [],
+    isGroupsLoading: false,
+    isGroupMessagesLoading: false,
     isUsersLoading: false,
     isMessagesLoading: false,
     isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) !== false,
@@ -21,6 +26,96 @@ export const useChatStore = create((set, get) => ({
 
     setActiveTab: (tab) => set({ activeTab: tab }),
     setSelectedUser: (selectedUser) => set({ selectedUser }),
+    setSelectedGroup: (selectedGroup) => set({ selectedGroup }),
+
+    getMyGroups: async () => {
+        set({ isGroupsLoading: true });
+
+        try {
+            const res = await axiosInstance.get("/messages/groups");
+            set({ groups: res.data });
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to load groups");
+        } finally {
+            set({ isGroupsLoading: false });
+        }
+    },
+
+    createGroup: async (data) => {
+        try {
+            const res = await axiosInstance.post("/messages/groups", data);
+            set({ groups: [res.data, ...get().groups] });
+            return res.data;
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to create group");
+            throw error;
+        }
+    },
+
+    getGroupMessages: async (groupId) => {
+        set({ isGroupMessagesLoading: true });
+        try {
+            const res = await axiosInstance.get(`/messages/groups/${groupId}`);
+            set({ groupMessages: res.data });
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to load group messages");
+        } finally {
+            set({ isGroupMessagesLoading: false });
+        }
+    },
+
+    sendGroupMessage: async (messageData) => {
+        const { selectedGroup } = get();
+        const { authUser } = useAuthStore.getState();
+
+        const tempId = `temp-${Date.now()}`
+
+        const optimisticMessage = {
+            _id: tempId,
+            senderId: authUser._id,
+            groupId: selectedGroup._id,
+            text: messageData.text,
+            image: messageData.image,
+            createdAt: new Date().toISOString(),
+            isOptimistic: true,
+        };
+
+        set({ groupMessages: [...get().groupMessages, optimisticMessage] })
+
+        try {
+            const res = await axiosInstance.post(`/messages/groups/${selectedGroup._id}/send`, messageData);
+            set({ groupMessages: get().groupMessages.map(m => m._id === tempId ? res.data : m) });
+        } catch (error) {
+            set({ groupMessages: get().groupMessages.filter(m => m._id !== tempId) });
+            toast.error(error.response?.data?.message || "Failed to send message");
+        }
+    },
+
+    subscribeToGroupMessage: () => {
+        const socket = useAuthStore.getState().socket;
+        if (!socket) return;
+
+        socket.off("newGroupMessage");
+        socket.on("newGroupMessage", (newMessage) => {
+            const { selectedGroup, groupMessages, isSoundEnabled } = get();
+
+            const isFromSelectedGroup = selectedGroup && newMessage.groupId === selectedGroup._id;
+            const isDuplicate = groupMessages.some((msg) => msg._id === newMessage._id);
+
+            if (isFromSelectedGroup && !isDuplicate) {
+                set({ groupMessages: [...groupMessages, newMessage] });
+            } else if (!isFromSelectedGroup && isSoundEnabled) {
+                const notificationSound = new Audio("/sounds/notification.mp3");
+                notificationSound.currentTime = 0;
+                notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+            }
+        });
+    },
+
+    unsubscribeFromGroupMessage: () => {
+        const socket = useAuthStore.getState().socket;
+        if (socket) socket.off("newGroupMessage");
+    },
 
     loadChatThemes: async () => {
         try {

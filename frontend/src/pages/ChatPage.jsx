@@ -7,18 +7,23 @@ import ActiveTabSwitch from '../components/ActiveTabSwitch'
 import ChatContainer from '../components/ChatContainer'
 import ChatList from '../components/ChatList'
 import ContactList from '../components/ContactList'
+import GroupList from '../components/GroupList'
 import NoConversationPlaceHolder from '../components/NoConversationPlaceHolder'
 
 function ChatPage() {
   const {logout} = useAuthStore();
-  const {activeTab, selectedUser, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges} = useChatStore();
+  const {activeTab, selectedUser, selectedGroup, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage} = useChatStore();
 
   useEffect(() => {
     loadChatThemes();
     subscribeToThemeChanges();
+    subscribeToGroupMessage();
 
-    return () => unsubscribeFromThemeChanges();
-  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges]);
+    return () => {
+      unsubscribeFromThemeChanges();
+      unsubscribeFromGroupMessage();
+    };
+  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage]);
 
   return (
     <div className='relative w-full max-w-7xl h-[min(90vh,880px)]'>
@@ -29,13 +34,15 @@ function ChatPage() {
           <ActiveTabSwitch/>
           
           <div className='flex-1 overflow-y-auto p-3 space-y-1.5'>
-            {activeTab === "chats" ? <ChatList/> : <ContactList/>}
+            {activeTab === "chats" && <ChatList/>}
+            {activeTab === "contacts" && <ContactList/>}
+            {activeTab === "groups" && <GroupList/>}
           </div>
         </div>
 
         {/* Right side */}
         <div className='flex-1 flex flex-col bg-white/[0.02] backdrop-blur-xl border-l border-white/10'>
-          {selectedUser ? <ChatContainer/> : <NoConversationPlaceHolder/>}
+          {selectedUser || selectedGroup ? <ChatContainer/> : <NoConversationPlaceHolder/>}
         </div>
       </BorderAnimatedContainer>
     </div>

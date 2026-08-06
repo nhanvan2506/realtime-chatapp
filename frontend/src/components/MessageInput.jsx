@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
 import useKeyboardSound from '../hooks/useKeyboardSound'
 import { useChatStore } from '../store/useChatStore';
+import toast from 'react-hot-toast';
 import { ImageIcon } from 'lucide-react';
 import { XIcon, SendIcon } from 'lucide-react';
 
@@ -11,7 +12,7 @@ function MessageInput() {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
 
-  const {sendMessages, isSoundEnabled} = useChatStore();
+  const {sendMessages, sendGroupMessage, selectedGroup, isSoundEnabled} = useChatStore();
 
   const handleSendMessage = (e) =>{
     e.preventDefault();
@@ -22,10 +23,17 @@ function MessageInput() {
       playRandomKeyStrokeSound()
     }
 
-    sendMessages({
-      text: text.trim(),
-      image: imagePreview
-    })
+    if (selectedGroup) {
+      sendGroupMessage({
+        text: text.trim(),
+        image: imagePreview
+      })
+    } else {
+      sendMessages({
+        text: text.trim(),
+        image: imagePreview
+      })
+    }
 
     setText("")
     setImagePreview("")

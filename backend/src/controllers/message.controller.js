@@ -94,7 +94,10 @@ export const getChatPartners = async (req, res) => {
             msg.senderId.toString() === loggedInUserId.toString() ? msg.receiverId.toString() : msg.senderId.toString()
         ))];
 
-        const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select("-password");
+        // per-id lookups instead of $in, which can silently drop results on some MongoDB backends
+        const chatPartners = (await Promise.all(
+            chatPartnerIds.map((id) => User.findById(id).select("-password"))
+        )).filter(Boolean);
 
         res.status(200).json(chatPartners)
     } catch (error) {
