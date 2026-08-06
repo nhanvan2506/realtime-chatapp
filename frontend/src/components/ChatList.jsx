@@ -11,7 +11,7 @@ function ChatList() {
   },[getMyChatPartners]);
 
   if (isUsersLoading) return <UsersLoadingSkeleton/>;
-  if (chats.lenght === 0) return <NoChatsFound/>;
+  if (chats.length === 0) return <NoChatsFound/>;
  
   return (
   <>
