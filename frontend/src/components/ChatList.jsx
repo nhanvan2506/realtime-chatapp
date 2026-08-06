@@ -2,9 +2,11 @@ import React, { useEffect } from 'react'
 import { useChatStore} from '../store/useChatStore'
 import UsersLoadingSkeleton from '../components/UsersLoadingSkeleton';
 import NoChatsFound from './NoChatFound';
+import { useAuthStore } from '../store/useAuthStore';
 
 function ChatList() {
   const {getMyChatPartners, chats, isUsersLoading, setSelectedUser} = useChatStore();
+  const {onlineUsers} = useAuthStore();
 
   useEffect (()=>{
     getMyChatPartners();
@@ -21,7 +23,7 @@ function ChatList() {
       className='bg-cyan-500/10 p-4 rounded-lg cursor-pointer hover:bg-cyan-500/20 transition-colors'
       onClick={()=>setSelectedUser(chat)}>
         <div className='flex items-center gap-3'>
-          <div className={`avatar online`}>
+          <div className={`avatar ${onlineUsers.includes(chat._id) ? 'avatar-online' : 'avatar-offline'}`}>
             <div className='size-12 rounded-full'>
               <img src={chat.profilePic || "/avatar.png"} alt={chat.fullName} />
             </div>
