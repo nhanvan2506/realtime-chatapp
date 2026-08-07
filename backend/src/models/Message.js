@@ -30,6 +30,19 @@ const messageSchema = new mongoose.Schema(
       ref: "User",
       default: [],
     },
+    edited: {
+      type: Boolean,
+      default: false,
+    },
+    deletedForEveryone: {
+      type: Boolean,
+      default: false,
+    },
+    deletedBy: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "User",
+      default: [],
+    },
   },
   { timestamps: true }
 );

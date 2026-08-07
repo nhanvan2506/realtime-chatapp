@@ -4,7 +4,7 @@ import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
 import toast from 'react-hot-toast';
 import { ImageIcon } from 'lucide-react';
-import { XIcon, SendIcon } from 'lucide-react';
+import { XIcon, SendIcon, CheckIcon, PencilLine } from 'lucide-react';
 
 const TYPING_EMIT_INTERVAL = 2000;
 const TYPING_STOP_DELAY = 2500;
@@ -12,18 +12,20 @@ const TYPING_STOP_DELAY = 2500;
 function MessageInput() {
 
   const {playRandomKeyStrokeSound} = useKeyboardSound();
-  const [text, setText] = useState("");
+  const {sendMessages, sendGroupMessage, selectedGroup, selectedUser, isSoundEnabled, editingMessage, setEditingMessage, editMessage} = useChatStore();
+  const { socket } = useAuthStore();
+
+  // MessageInput is remounted with a key when editingMessage changes, so the
+  // initial text always reflects the message being edited.
+  const [text, setText] = useState(editingMessage?.text || "");
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const typingTimerRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
   const typingTargetRef = useRef(null);
 
-  const {sendMessages, sendGroupMessage, selectedGroup, selectedUser, isSoundEnabled} = useChatStore();
-  const { socket } = useAuthStore();
-
   const emitTyping = (isTyping) => {
-    if (!socket) return;
+    if (!socket || editingMessage) return;
 
     if (selectedGroup) {
       typingTargetRef.current = { groupId: selectedGroup._id };
@@ -66,6 +68,15 @@ function MessageInput() {
 
   const handleSendMessage = (e) =>{
     e.preventDefault();
+
+    if (editingMessage) {
+      if (!text.trim()) return;
+      editMessage(editingMessage._id, text.trim());
+      stopTyping();
+      setText("");
+      return;
+    }
+
     if(!text.trim() && !imagePreview){
       return;
     }
@@ -131,6 +142,26 @@ function MessageInput() {
         </div>
       )}
 
+      {editingMessage && (
+        <div className="max-w-3xl mx-auto mb-3 flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2">
+          <PencilLine className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="text-sm text-cyan-300 flex-1 truncate">
+            Editing message
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingMessage(null);
+              setText("");
+            }}
+            className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+            title="Cancel editing"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSendMessage} className='max-w-3xl mx-auto flex space-x-4'>
         <input 
           type='text' 
@@ -141,7 +172,7 @@ function MessageInput() {
             handleTypingChange();
           }}
           className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg py-2 px-4"
-          placeholder="Type your message..."
+          placeholder={editingMessage ? "Edit your message..." : "Type your message..."}
         />
 
         <input
@@ -152,21 +183,24 @@ function MessageInput() {
           className="hidden"
         />
 
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className={`bg-slate-800/50 text-slate-400 hover:text-slate-200 rounded-lg px-4 transition-colors ${
-            imagePreview ? "text-cyan-500" : ""
-          }`}
-        >
-          <ImageIcon className="w-5 h-5" />
-        </button>
+        {!editingMessage && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className={`bg-slate-800/50 text-slate-400 hover:text-slate-200 rounded-lg px-4 transition-colors ${
+              imagePreview ? "text-cyan-500" : ""
+            }`}
+          >
+            <ImageIcon className="w-5 h-5" />
+          </button>
+        )}
         <button
           type="submit"
-          disabled={!text.trim() && !imagePreview}
+          disabled={editingMessage ? !text.trim() : !text.trim() && !imagePreview}
           className="bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg px-4 py-2 font-medium hover:from-cyan-600 hover:to-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          title={editingMessage ? "Save changes" : "Send message"}
         >
-          <SendIcon className="w-5 h-5" />
+          {editingMessage ? <CheckIcon className="w-5 h-5" /> : <SendIcon className="w-5 h-5" />}
         </button>
       </form>
     </div>

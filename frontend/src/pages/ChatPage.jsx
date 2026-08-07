@@ -12,7 +12,7 @@ import NoConversationPlaceHolder from '../components/NoConversationPlaceHolder'
 
 function ChatPage() {
   const {logout} = useAuthStore();
-  const {activeTab, selectedUser, selectedGroup, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping} = useChatStore();
+  const {activeTab, selectedUser, selectedGroup, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping, subscribeToMessageEdits, unsubscribeFromMessageEdits, subscribeToMessageDeletes, unsubscribeFromMessageDeletes} = useChatStore();
 
   useEffect(() => {
     loadChatThemes();
@@ -20,14 +20,18 @@ function ChatPage() {
     subscribeToGroupMessage();
     subscribeToReadReceipts();
     subscribeToTyping();
+    subscribeToMessageEdits();
+    subscribeToMessageDeletes();
 
     return () => {
       unsubscribeFromThemeChanges();
       unsubscribeFromGroupMessage();
       unsubscribeFromReadReceipts();
       unsubscribeFromTyping();
+      unsubscribeFromMessageEdits();
+      unsubscribeFromMessageDeletes();
     };
-  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping]);
+  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping, subscribeToMessageEdits, unsubscribeFromMessageEdits, subscribeToMessageDeletes, unsubscribeFromMessageDeletes]);
 
   return (
     <div className='relative w-full max-w-7xl h-[min(90vh,880px)]'>

@@ -6,11 +6,11 @@ import NoChatHistoryPlaceholder from './NoChatHistoryPlaceholder';
 import MessagesLoadingSkeleton from './MessagesLoadingSkeleton';
 import MessageInput from './MessageInput';
 import { getTheme } from '../lib/chatThemes';
-import { Check } from 'lucide-react';
+import { Check, Pencil, Trash2 } from 'lucide-react';
 
 function ChatContainer() {
 
-  const { selectedUser, selectedGroup, getMessagesByUserId, getGroupMessages, messages, groupMessages, isMessagesLoading, isGroupMessagesLoading, subscribeToMessage, unsubscribeFromMessages, chatThemes, markMessagesAsRead, markGroupMessagesAsRead, isTyping, typingUserId, typingGroupId } = useChatStore();
+  const { selectedUser, selectedGroup, getMessagesByUserId, getGroupMessages, messages, groupMessages, isMessagesLoading, isGroupMessagesLoading, subscribeToMessage, unsubscribeFromMessages, chatThemes, markMessagesAsRead, markGroupMessagesAsRead, isTyping, typingUserId, typingGroupId, editingMessage, setEditingMessage, deleteMessage, deleteMenuId, setDeleteMenuId } = useChatStore();
   const { authUser, socket } = useAuthStore();
   const messageEndRef = useRef(null)
 
@@ -46,6 +46,9 @@ function ChatContainer() {
   }, [messages, groupMessages, isTyping]);
 
   const activeMessages = isGroupChat ? groupMessages : messages;
+  const visibleMessages = activeMessages.filter(
+    (m) => !(m.deletedBy || []).includes(authUser._id)
+  );
   const isLoading = isGroupChat ? isGroupMessagesLoading : isMessagesLoading;
 
   const showTyping = isTyping && (
@@ -91,18 +94,19 @@ function ChatContainer() {
         )}
 
         <div className={`h-full px-6 overflow-y-auto py-8 ${!isGroupChat ? theme.background : ""}`}>
-        {activeMessages.length > 0 && !isLoading ? (
+        {visibleMessages.length > 0 && !isLoading ? (
           <div className='max-w-3xl mx-auto space-y-6'>
-            {activeMessages.map(msg => {
+            {visibleMessages.map(msg => {
               const isOwn = isOwnMessage(msg);
               const isRead = !isGroupChat && msg.readBy?.includes(selectedUser._id);
+              const isDeleted = msg.deletedForEveryone;
               return (
-                <div key={msg._id} className={`chat ${isOwn ? "chat-end" : "chat-start"}`}>
+                <div key={msg._id} className={`chat group ${isOwn ? "chat-end" : "chat-start"}`}>
                   <div className={`chat-bubble relative ${isOwn
                       ? theme.sender
                       : theme.receiver
                     }`}>
-                    {msg.image && (
+                    {msg.image && !isDeleted && (
                       <img src={msg.image} alt="Shared" className="rounded-lg h-48 object-cover" />
                     )}
                     {isGroupChat && !isOwn && (
@@ -110,8 +114,17 @@ function ChatContainer() {
                         {msg.senderId?.fullName || "Unknown"}
                       </p>
                     )}
-                    {msg.text && <p className="mt-2">{msg.text}</p>}
+                    {isDeleted ? (
+                      <p className="mt-2 italic opacity-70">
+                        {isOwn ? "You deleted this message" : "This message was deleted"}
+                      </p>
+                    ) : (
+                      msg.text && <p className="mt-2">{msg.text}</p>
+                    )}
                     <p className="text-xs mt-1 opacity-75 flex items-center gap-1">
+                      {msg.edited && !isDeleted && (
+                        <span className="italic text-[10px]">edited</span>
+                      )}
                       {new Date(msg.createdAt).toLocaleTimeString(undefined, {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -136,6 +149,54 @@ function ChatContainer() {
                         </span>
                       )}
                     </p>
+                    {isOwn && !isDeleted && (
+                      <div className="absolute -top-3 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          title="Edit message"
+                          onClick={() => {
+                            setDeleteMenuId(null);
+                            setEditingMessage(msg);
+                          }}
+                          className="w-7 h-7 rounded-full bg-slate-800/95 border border-slate-600/50 flex items-center justify-center text-slate-200 hover:bg-cyan-600 transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete message"
+                          onClick={() => setDeleteMenuId(deleteMenuId === msg._id ? null : msg._id)}
+                          className="w-7 h-7 rounded-full bg-slate-800/95 border border-slate-600/50 flex items-center justify-center text-slate-200 hover:bg-rose-600 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {deleteMenuId === msg._id && (
+                          <div className="absolute top-full right-0 mt-1 w-44 rounded-lg bg-slate-800 border border-slate-600/50 shadow-xl p-1 z-20">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteMenuId(null);
+                                deleteMessage(msg._id, false);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-md text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                            >
+                              Delete for me
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteMenuId(null);
+                                deleteMessage(msg._id, true);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-md text-sm text-rose-400 hover:bg-slate-700 transition-colors"
+                            >
+                              Delete for everyone
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -168,7 +229,7 @@ function ChatContainer() {
         </div>
       </div>
 
-      <MessageInput />
+      <MessageInput key={editingMessage?._id || "composer"} />
     </>
   )
 }

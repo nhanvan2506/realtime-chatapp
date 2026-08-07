@@ -23,6 +23,8 @@ export const useChatStore = create((set, get) => ({
     isTyping: false,
     typingUserId: null,
     typingGroupId: null,
+    editingMessage: null,
+    deleteMenuId: null,
 
     toggleSound: () => {
         localStorage.setItem("isSoundEnabled", !get().isSoundEnabled)
@@ -32,6 +34,9 @@ export const useChatStore = create((set, get) => ({
     setActiveTab: (tab) => set({ activeTab: tab }),
     setSelectedUser: (selectedUser) => set({ selectedUser }),
     setSelectedGroup: (selectedGroup) => set({ selectedGroup }),
+
+    setEditingMessage: (message) => set({ editingMessage: message }),
+    setDeleteMenuId: (deleteMenuId) => set({ deleteMenuId }),
 
     getMyGroups: async () => {
         set({ isGroupsLoading: true });
@@ -61,7 +66,7 @@ export const useChatStore = create((set, get) => ({
         set({ isGroupMessagesLoading: true });
         try {
             const res = await axiosInstance.get(`/messages/groups/${groupId}`);
-            set({ groupMessages: res.data });
+            set({ groupMessages: res.data, editingMessage: null, deleteMenuId: null });
         } catch (error) {
             toast.error(error.response?.data?.message || "Failed to load group messages");
         } finally {
@@ -290,7 +295,7 @@ export const useChatStore = create((set, get) => ({
         set({ isMessagesLoading: true });
         try {
             const res = await axiosInstance.get(`/messages/${userId}`);
-            set({ messages: res.data });
+            set({ messages: res.data, editingMessage: null, deleteMenuId: null });
         } catch (error) {
             toast.error(error.response?.data?.message || "Something wrong");
         } finally {
@@ -326,6 +331,44 @@ export const useChatStore = create((set, get) => ({
         }
     },
 
+    editMessage: async (messageId, text) => {
+        try {
+            const res = await axiosInstance.put(`/messages/${messageId}`, { text });
+            const updated = res.data;
+
+            if (get().selectedGroup) {
+                set({ groupMessages: get().groupMessages.map((m) => (m._id === messageId ? updated : m)) });
+            } else {
+                set({ messages: get().messages.map((m) => (m._id === messageId ? updated : m)) });
+            }
+            set({ editingMessage: null });
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to edit message");
+        }
+    },
+
+    deleteMessage: async (messageId, deleteForEveryone) => {
+        try {
+            const res = await axiosInstance.delete(`/messages/${messageId}`, { data: { deleteForEveryone } });
+
+            if (deleteForEveryone) {
+                const updated = res.data;
+                if (get().selectedGroup) {
+                    set({ groupMessages: get().groupMessages.map((m) => (m._id === messageId ? updated : m)) });
+                } else {
+                    set({ messages: get().messages.map((m) => (m._id === messageId ? updated : m)) });
+                }
+            } else {
+                set({
+                    messages: get().messages.filter((m) => m._id !== messageId),
+                    groupMessages: get().groupMessages.filter((m) => m._id !== messageId),
+                });
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to delete message");
+        }
+    },
+
     subscribeToMessage: () => {
         const socket = useAuthStore.getState().socket;
         if (!socket) return;
@@ -351,6 +394,62 @@ export const useChatStore = create((set, get) => ({
     unsubscribeFromMessages: () => {
         const socket = useAuthStore.getState().socket;
         if (socket) socket.off("newMessage");
+    },
+
+    subscribeToMessageEdits: () => {
+        const socket = useAuthStore.getState().socket;
+        if (!socket) return;
+
+        socket.off("messageEdited");
+        socket.on("messageEdited", (updatedMessage) => {
+            const { selectedUser, selectedGroup, messages, groupMessages } = get();
+
+            if (updatedMessage.groupId) {
+                if (selectedGroup && updatedMessage.groupId === selectedGroup._id) {
+                    set({ groupMessages: groupMessages.map((m) => (m._id === updatedMessage._id ? updatedMessage : m)) });
+                }
+            } else if (selectedUser) {
+                const isRelevant =
+                    updatedMessage.senderId?.toString() === selectedUser._id?.toString() ||
+                    updatedMessage.receiverId?.toString() === selectedUser._id?.toString();
+                if (isRelevant) {
+                    set({ messages: messages.map((m) => (m._id === updatedMessage._id ? updatedMessage : m)) });
+                }
+            }
+        });
+    },
+
+    unsubscribeFromMessageEdits: () => {
+        const socket = useAuthStore.getState().socket;
+        if (socket) socket.off("messageEdited");
+    },
+
+    subscribeToMessageDeletes: () => {
+        const socket = useAuthStore.getState().socket;
+        if (!socket) return;
+
+        socket.off("messageDeleted");
+        socket.on("messageDeleted", (updatedMessage) => {
+            const { selectedUser, selectedGroup, messages, groupMessages } = get();
+
+            if (updatedMessage.groupId) {
+                if (selectedGroup && updatedMessage.groupId === selectedGroup._id) {
+                    set({ groupMessages: groupMessages.map((m) => (m._id === updatedMessage._id ? updatedMessage : m)) });
+                }
+            } else if (selectedUser) {
+                const isRelevant =
+                    updatedMessage.senderId?.toString() === selectedUser._id?.toString() ||
+                    updatedMessage.receiverId?.toString() === selectedUser._id?.toString();
+                if (isRelevant) {
+                    set({ messages: messages.map((m) => (m._id === updatedMessage._id ? updatedMessage : m)) });
+                }
+            }
+        });
+    },
+
+    unsubscribeFromMessageDeletes: () => {
+        const socket = useAuthStore.getState().socket;
+        if (socket) socket.off("messageDeleted");
     },
 
 }));

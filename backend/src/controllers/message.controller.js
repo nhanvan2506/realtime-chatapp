@@ -1,5 +1,6 @@
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import Group from "../models/Group.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
 
@@ -78,6 +79,144 @@ export const sendMessage = async (req, res) => {
         res.status(201).json(newMessage);
     } catch (error) {
         console.log("Error in sendMessage controller", error.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+const notifyConversationPartners = (message, payload, event, excludeUserId) => {
+    if (message.groupId) {
+        for (const memberId of message.members || []) {
+            if (memberId.toString() === excludeUserId.toString()) continue;
+
+            const receiverSocketId = getReceiverSocketId(memberId.toString());
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit(event, payload);
+            }
+        }
+    } else {
+        const otherId = message.receiverId?.toString() === excludeUserId.toString()
+            ? message.senderId
+            : message.receiverId;
+
+        const receiverSocketId = getReceiverSocketId(otherId.toString());
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit(event, payload);
+        }
+    }
+};
+
+const populateMessageIfGroup = async (message) => {
+    return message.groupId
+        ? Message.findById(message._id).populate("senderId", "fullName profilePic")
+        : Message.findById(message._id);
+};
+
+export const editMessage = async (req, res) => {
+    try {
+        const { id: messageId } = req.params;
+        const { text } = req.body;
+        const userId = req.user._id;
+
+        if (!text || !text.trim()) {
+            return res.status(400).json({ message: "Message text is required to edit." });
+        }
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+            return res.status(404).json({ message: "Message not found." });
+        }
+
+        if (message.deletedForEveryone || (message.deletedBy || []).some((id) => id.equals(userId))) {
+            return res.status(400).json({ message: "Cannot edit a deleted message." });
+        }
+
+        if (!message.senderId.equals(userId)) {
+            return res.status(403).json({ message: "You can only edit your own messages." });
+        }
+
+        if (message.groupId) {
+            const group = await Group.findById(message.groupId);
+            if (!group || !group.members.some((m) => m.toString() === userId.toString())) {
+                return res.status(403).json({ message: "You are not a member of this group." });
+            }
+            message.members = group.members;
+        }
+
+        message.text = text.trim();
+        message.edited = true;
+        await message.save();
+
+        const updatedMessage = await populateMessageIfGroup(message);
+
+        notifyConversationPartners(message, updatedMessage, "messageEdited", userId);
+
+        res.status(200).json(updatedMessage);
+    } catch (error) {
+        console.error("Error in editMessage controller:", error.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const deleteMessage = async (req, res) => {
+    try {
+        const { id: messageId } = req.params;
+        const { deleteForEveryone } = req.body;
+        const userId = req.user._id;
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+            return res.status(404).json({ message: "Message not found." });
+        }
+
+        if (message.deletedForEveryone) {
+            return res.status(400).json({ message: "Message already deleted." });
+        }
+
+        const isSender = message.senderId.equals(userId);
+
+        if (deleteForEveryone) {
+            if (!isSender) {
+                return res.status(403).json({ message: "Only the sender can delete for everyone." });
+            }
+
+            if (message.groupId) {
+                const group = await Group.findById(message.groupId);
+                message.members = group?.members || [];
+            }
+
+            message.text = undefined;
+            message.image = undefined;
+            message.deletedForEveryone = true;
+            await message.save();
+
+            const updatedMessage = await populateMessageIfGroup(message);
+
+            notifyConversationPartners(message, updatedMessage, "messageDeleted", userId);
+
+            return res.status(200).json(updatedMessage);
+        }
+
+        // delete for self - the sender or any recipient of the conversation
+        if (message.groupId) {
+            const group = await Group.findById(message.groupId);
+            if (!group || !group.members.some((m) => m.toString() === userId.toString())) {
+                return res.status(403).json({ message: "You are not a member of this group." });
+            }
+        } else {
+            const isParticipant = message.senderId.equals(userId) || message.receiverId?.equals(userId);
+            if (!isParticipant) {
+                return res.status(403).json({ message: "You are not part of this conversation." });
+            }
+        }
+
+        await Message.updateOne({ _id: message._id }, { $addToSet: { deletedBy: userId } });
+
+        res.status(200).json({
+            messageId: message._id.toString(),
+            deletedBy: [...new Set([...(message.deletedBy || []).map(String), userId.toString()])],
+        });
+    } catch (error) {
+        console.error("Error in deleteMessage controller:", error.message);
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
