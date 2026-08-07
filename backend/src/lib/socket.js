@@ -31,6 +31,37 @@ io.on("connection", (socket) => {
     //io.emit used to send events to all connected clients
     io.emit("getOnlineUsers", Object.keys(userSocketMap))
 
+    // join/leave a socket room per group so typing can be broadcast to members viewing it
+    socket.on("joinGroup", (groupId) => {
+        socket.join(groupId);
+    });
+
+    socket.on("leaveGroup", (groupId) => {
+        socket.leave(groupId);
+    });
+
+    // relay typing indicators to the intended recipient
+    socket.on("typing", (data) => {
+        const { receiverId, groupId, isTyping } = data || {};
+
+        if (receiverId) {
+            const targetSocketId = getReceiverSocketId(receiverId);
+            if (targetSocketId) {
+                io.to(targetSocketId).emit("typing", {
+                    userId,
+                    receiverId,
+                    isTyping: !!isTyping,
+                });
+            }
+        } else if (groupId) {
+            socket.to(groupId).emit("typing", {
+                userId,
+                groupId,
+                isTyping: !!isTyping,
+            });
+        }
+    });
+
     socket.on("disconnect", () => {
         console.log("A User disconnected", socket.user.fullName);
         delete userSocketMap[userId];

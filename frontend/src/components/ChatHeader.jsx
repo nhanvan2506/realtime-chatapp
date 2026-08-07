@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { CHAT_THEMES, getTheme } from '../lib/chatThemes';
 
 function ChatHeader() {
-    const { selectedUser, selectedGroup, setSelectedUser, setSelectedGroup, chatThemes, setChatTheme } = useChatStore();
+    const { selectedUser, selectedGroup, setSelectedUser, setSelectedGroup, chatThemes, setChatTheme, isTyping, typingUserId, typingGroupId } = useChatStore();
     const { onlineUsers } = useAuthStore();
     const [themeOpen, setThemeOpen] = useState(false);
     const themeMenuRef = useRef(null);
@@ -17,9 +17,12 @@ function ChatHeader() {
         ? null
         : (selectedUser.profilePic || "/avatar.png");
     const isOnline = !isGroupChat && onlineUsers.includes(selectedUser._id);
+    const isTypingUser = isTyping && (
+        isGroupChat ? typingGroupId === selectedGroup._id : typingUserId === selectedUser._id
+    );
     const subtitle = isGroupChat
         ? `${selectedGroup.members.length} members`
-        : (isOnline ? "Online" : "Offline");
+        : (isTypingUser ? "Typing..." : (isOnline ? "Online" : "Offline"));
 
     const currentTheme = getTheme(chatThemes[selectedUser?._id]);
 
@@ -78,7 +81,7 @@ function ChatHeader() {
 
                     <div className='min-w-0'>
                         <h3 className='text-slate-200 font-medium truncate'>{name}</h3>
-                        <p className='text-slate-400 text-sm'>{subtitle}</p>
+                        <p className={`text-sm ${isTypingUser ? 'text-cyan-400' : 'text-slate-400'}`}>{subtitle}</p>
                     </div>
                 </div>
 

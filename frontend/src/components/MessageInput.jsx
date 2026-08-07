@@ -1,9 +1,13 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import useKeyboardSound from '../hooks/useKeyboardSound'
 import { useChatStore } from '../store/useChatStore';
+import { useAuthStore } from '../store/useAuthStore';
 import toast from 'react-hot-toast';
 import { ImageIcon } from 'lucide-react';
 import { XIcon, SendIcon } from 'lucide-react';
+
+const TYPING_EMIT_INTERVAL = 2000;
+const TYPING_STOP_DELAY = 2500;
 
 function MessageInput() {
 
@@ -11,8 +15,54 @@ function MessageInput() {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const lastTypingEmitRef = useRef(0);
+  const typingTargetRef = useRef(null);
 
-  const {sendMessages, sendGroupMessage, selectedGroup, isSoundEnabled} = useChatStore();
+  const {sendMessages, sendGroupMessage, selectedGroup, selectedUser, isSoundEnabled} = useChatStore();
+  const { socket } = useAuthStore();
+
+  const emitTyping = (isTyping) => {
+    if (!socket) return;
+
+    if (selectedGroup) {
+      typingTargetRef.current = { groupId: selectedGroup._id };
+      socket.emit("typing", { groupId: selectedGroup._id, isTyping });
+    } else if (selectedUser) {
+      typingTargetRef.current = { receiverId: selectedUser._id };
+      socket.emit("typing", { receiverId: selectedUser._id, isTyping });
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(typingTimerRef.current);
+      const liveSocket = useAuthStore.getState().socket;
+      if (liveSocket && typingTargetRef.current) {
+        liveSocket.emit("typing", { ...typingTargetRef.current, isTyping: false });
+      }
+    };
+  }, []);
+
+  const handleTypingChange = () => {
+    const now = Date.now();
+    if (now - lastTypingEmitRef.current >= TYPING_EMIT_INTERVAL) {
+      lastTypingEmitRef.current = now;
+      emitTyping(true);
+    }
+
+    clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      emitTyping(false);
+      lastTypingEmitRef.current = 0;
+    }, TYPING_STOP_DELAY);
+  };
+
+  const stopTyping = () => {
+    clearTimeout(typingTimerRef.current);
+    emitTyping(false);
+    lastTypingEmitRef.current = 0;
+  };
 
   const handleSendMessage = (e) =>{
     e.preventDefault();
@@ -35,6 +85,7 @@ function MessageInput() {
       })
     }
 
+    stopTyping();
     setText("")
     setImagePreview("")
     if(fileInputRef.current){
@@ -87,6 +138,7 @@ function MessageInput() {
           onChange={(e)=>{ 
             setText(e.target.value);
             isSoundEnabled && playRandomKeyStrokeSound();
+            handleTypingChange();
           }}
           className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg py-2 px-4"
           placeholder="Type your message..."

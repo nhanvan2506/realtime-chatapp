@@ -88,6 +88,7 @@ export const getChatPartners = async (req, res) => {
 
         const messages = await Message.find({
             $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
+            receiverId: { $ne: null },
         });
 
         const chatPartnerIds = [...new Set(messages.map((msg) =>
@@ -105,6 +106,46 @@ export const getChatPartners = async (req, res) => {
         res.status(500).json({ error: "Internal server error" });
     }
 }
+
+export const markMessagesAsRead = async (req, res) => {
+    try {
+        const myId = req.user._id;
+        const { id: userToReadFrom } = req.params;
+
+        await Message.updateMany(
+            {
+                senderId: userToReadFrom,
+                receiverId: myId,
+                readBy: { $ne: myId },
+            },
+            { $addToSet: { readBy: myId } }
+        );
+
+        const updated = await Message.find({
+            senderId: userToReadFrom,
+            receiverId: myId,
+            readBy: myId,
+        }).select("_id");
+
+        const messageIds = updated.map((m) => m._id.toString());
+
+        // let the other user know their messages have been read
+        if (messageIds.length) {
+            const receiverSocketId = getReceiverSocketId(userToReadFrom.toString());
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit("messagesRead", {
+                    userId: myId.toString(),
+                    messageIds,
+                });
+            }
+        }
+
+        res.status(200).json({ userId: myId.toString(), messageIds });
+    } catch (error) {
+        console.error("Error in markMessagesAsRead:", error.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
 
 export const getChatThemes = async (req, res) => {
     try {

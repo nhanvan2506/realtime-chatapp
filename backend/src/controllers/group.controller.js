@@ -81,6 +81,56 @@ export const getGroupMessages = async (req, res) => {
     }
 };
 
+export const markGroupMessagesAsRead = async (req, res) => {
+    try {
+        const { groupId } = req.params;
+        const myId = req.user._id;
+
+        const group = await Group.findOne({ _id: groupId, members: myId });
+        if (!group) {
+            return res.status(403).json({ message: "You are not a member of this group" });
+        }
+
+        await Message.updateMany(
+            {
+                groupId,
+                senderId: { $ne: myId },
+                readBy: { $ne: myId },
+            },
+            { $addToSet: { readBy: myId } }
+        );
+
+        const updated = await Message.find({
+            groupId,
+            senderId: { $ne: myId },
+            readBy: myId,
+        }).select("_id");
+
+        const messageIds = updated.map((m) => m._id.toString());
+
+        // notify other online members so their read counts update in real time
+        if (messageIds.length) {
+            for (const memberId of group.members) {
+                if (memberId.toString() === myId.toString()) continue;
+
+                const receiverSocketId = getReceiverSocketId(memberId.toString());
+                if (receiverSocketId) {
+                    io.to(receiverSocketId).emit("groupMessagesRead", {
+                        groupId: groupId.toString(),
+                        userId: myId.toString(),
+                        messageIds,
+                    });
+                }
+            }
+        }
+
+        res.status(200).json({ userId: myId.toString(), messageIds });
+    } catch (error) {
+        console.error("Error in markGroupMessagesAsRead:", error.message);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 export const sendGroupMessage = async (req, res) => {
     try {
         const { groupId } = req.params;

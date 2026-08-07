@@ -3,6 +3,8 @@ import { axiosInstance } from '../lib/axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from './useAuthStore';
 
+let typingTimeoutId = null;
+
 export const useChatStore = create((set, get) => ({
     allContacts: [],
     chats: [],
@@ -18,6 +20,9 @@ export const useChatStore = create((set, get) => ({
     isMessagesLoading: false,
     isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) !== false,
     chatThemes: {},
+    isTyping: false,
+    typingUserId: null,
+    typingGroupId: null,
 
     toggleSound: () => {
         localStorage.setItem("isSoundEnabled", !get().isSoundEnabled)
@@ -104,6 +109,7 @@ export const useChatStore = create((set, get) => ({
 
             if (isFromSelectedGroup && !isDuplicate) {
                 set({ groupMessages: [...groupMessages, newMessage] });
+                get().markGroupMessagesAsRead(selectedGroup._id);
             } else if (!isFromSelectedGroup && isSoundEnabled) {
                 const notificationSound = new Audio("/sounds/notification.mp3");
                 notificationSound.currentTime = 0;
@@ -163,6 +169,107 @@ export const useChatStore = create((set, get) => ({
         finally {
             set({ isUsersLoading: false });
         }
+    },
+
+    markMessagesAsRead: async (userId) => {
+        try {
+            const res = await axiosInstance.get(`/messages/read/${userId}`);
+            const { messageIds, userId: readerId } = res.data;
+
+            if (messageIds?.length) {
+                set({
+                    messages: get().messages.map((m) =>
+                        messageIds.includes(m._id)
+                            ? { ...m, readBy: [...new Set([...(m.readBy || []), readerId])] }
+                            : m
+                    ),
+                });
+            }
+        } catch (error) {
+            console.error("Failed to mark messages as read:", error);
+        }
+    },
+
+    markGroupMessagesAsRead: async (groupId) => {
+        try {
+            const res = await axiosInstance.get(`/messages/groups/${groupId}/read`);
+            const { messageIds, userId: readerId } = res.data;
+
+            if (messageIds?.length) {
+                set({
+                    groupMessages: get().groupMessages.map((m) =>
+                        messageIds.includes(m._id)
+                            ? { ...m, readBy: [...new Set([...(m.readBy || []), readerId])] }
+                            : m
+                    ),
+                });
+            }
+        } catch (error) {
+            console.error("Failed to mark group messages as read:", error);
+        }
+    },
+
+    subscribeToReadReceipts: () => {
+        const socket = useAuthStore.getState().socket;
+        if (!socket) return;
+
+        socket.off("messagesRead");
+        socket.off("groupMessagesRead");
+
+        socket.on("messagesRead", ({ userId, messageIds }) => {
+            set({
+                messages: get().messages.map((m) =>
+                    messageIds.includes(m._id)
+                        ? { ...m, readBy: [...new Set([...(m.readBy || []), userId])] }
+                        : m
+                ),
+            });
+        });
+
+        socket.on("groupMessagesRead", ({ groupId, userId, messageIds }) => {
+            set({
+                groupMessages: get().groupMessages.map((m) =>
+                    m.groupId === groupId && messageIds.includes(m._id)
+                        ? { ...m, readBy: [...new Set([...(m.readBy || []), userId])] }
+                        : m
+                ),
+            });
+        });
+    },
+
+    unsubscribeFromReadReceipts: () => {
+        const socket = useAuthStore.getState().socket;
+        if (socket) {
+            socket.off("messagesRead");
+            socket.off("groupMessagesRead");
+        }
+    },
+
+    subscribeToTyping: () => {
+        const socket = useAuthStore.getState().socket;
+        if (!socket) return;
+
+        socket.off("typing");
+        socket.on("typing", ({ userId, groupId, isTyping }) => {
+            clearTimeout(typingTimeoutId);
+
+            if (isTyping) {
+                typingTimeoutId = setTimeout(() => set({ isTyping: false }), 3000);
+            }
+
+            set({
+                isTyping: !!isTyping,
+                typingUserId: userId,
+                typingGroupId: groupId,
+            });
+        });
+    },
+
+    unsubscribeFromTyping: () => {
+        const socket = useAuthStore.getState().socket;
+        if (socket) socket.off("typing");
+        clearTimeout(typingTimeoutId);
+        set({ isTyping: false });
     },
 
     getMyChatPartners: async () => {
@@ -232,6 +339,7 @@ export const useChatStore = create((set, get) => ({
 
             if (isMessageSentFromSelectedUser && !isDuplicate) {
                 set({ messages: [...currentMessages, newMessage] });
+                get().markMessagesAsRead(selectedUser._id);
             } else if (!isMessageSentFromSelectedUser && isSoundEnabled) {
                 const notificationSound = new Audio("/sounds/notification.mp3")
                 notificationSound.currentTime = 0;

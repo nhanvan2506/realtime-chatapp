@@ -12,18 +12,22 @@ import NoConversationPlaceHolder from '../components/NoConversationPlaceHolder'
 
 function ChatPage() {
   const {logout} = useAuthStore();
-  const {activeTab, selectedUser, selectedGroup, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage} = useChatStore();
+  const {activeTab, selectedUser, selectedGroup, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping} = useChatStore();
 
   useEffect(() => {
     loadChatThemes();
     subscribeToThemeChanges();
     subscribeToGroupMessage();
+    subscribeToReadReceipts();
+    subscribeToTyping();
 
     return () => {
       unsubscribeFromThemeChanges();
       unsubscribeFromGroupMessage();
+      unsubscribeFromReadReceipts();
+      unsubscribeFromTyping();
     };
-  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage]);
+  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping]);
 
   return (
     <div className='relative w-full max-w-7xl h-[min(90vh,880px)]'>
