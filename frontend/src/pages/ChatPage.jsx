@@ -9,10 +9,12 @@ import ChatList from '../components/ChatList'
 import ContactList from '../components/ContactList'
 import GroupList from '../components/GroupList'
 import NoConversationPlaceHolder from '../components/NoConversationPlaceHolder'
+import SearchModal from '../components/SearchModal'
+import ForwardModal from '../components/ForwardModal'
 
 function ChatPage() {
   const {logout} = useAuthStore();
-  const {activeTab, selectedUser, selectedGroup, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping, subscribeToMessageEdits, unsubscribeFromMessageEdits, subscribeToMessageDeletes, unsubscribeFromMessageDeletes} = useChatStore();
+  const {activeTab, selectedUser, selectedGroup, loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping, subscribeToMessageEdits, unsubscribeFromMessageEdits, subscribeToMessageDeletes, unsubscribeFromMessageDeletes, subscribeToMessageReactions, unsubscribeFromMessageReactions} = useChatStore();
 
   useEffect(() => {
     loadChatThemes();
@@ -22,6 +24,7 @@ function ChatPage() {
     subscribeToTyping();
     subscribeToMessageEdits();
     subscribeToMessageDeletes();
+    subscribeToMessageReactions();
 
     return () => {
       unsubscribeFromThemeChanges();
@@ -30,8 +33,9 @@ function ChatPage() {
       unsubscribeFromTyping();
       unsubscribeFromMessageEdits();
       unsubscribeFromMessageDeletes();
+      unsubscribeFromMessageReactions();
     };
-  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping, subscribeToMessageEdits, unsubscribeFromMessageEdits, subscribeToMessageDeletes, unsubscribeFromMessageDeletes]);
+  }, [loadChatThemes, subscribeToThemeChanges, unsubscribeFromThemeChanges, subscribeToGroupMessage, unsubscribeFromGroupMessage, subscribeToReadReceipts, unsubscribeFromReadReceipts, subscribeToTyping, unsubscribeFromTyping, subscribeToMessageEdits, unsubscribeFromMessageEdits, subscribeToMessageDeletes, unsubscribeFromMessageDeletes, subscribeToMessageReactions, unsubscribeFromMessageReactions]);
 
   return (
     <div className='relative w-full max-w-7xl h-[min(90vh,880px)]'>
@@ -53,6 +57,9 @@ function ChatPage() {
           {selectedUser || selectedGroup ? <ChatContainer/> : <NoConversationPlaceHolder/>}
         </div>
       </BorderAnimatedContainer>
+
+      <SearchModal/>
+      <ForwardModal/>
     </div>
   )
 }

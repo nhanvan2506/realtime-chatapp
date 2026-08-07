@@ -43,6 +43,24 @@ const messageSchema = new mongoose.Schema(
       ref: "User",
       default: [],
     },
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+    forwarded: {
+      type: Boolean,
+      default: false,
+    },
+    reactions: {
+      type: [
+        {
+          emoji: { type: String },
+          userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

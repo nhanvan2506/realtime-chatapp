@@ -26,6 +26,10 @@ export const getMessagesByUserId = async (req, res) => {
                 { senderId: myId, receiverId: userToChatId },
                 { senderId: userToChatId, receiverId: myId }
             ]
+        }).populate({
+            path: "replyTo",
+            select: "text image senderId deletedForEveryone",
+            populate: { path: "senderId", select: "fullName" },
         });
 
         res.status(200).json(message);
@@ -37,7 +41,7 @@ export const getMessagesByUserId = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
     try {
-        const { text, image } = req.body;
+        const { text, image, forwarded, replyTo } = req.body;
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
 
@@ -66,17 +70,20 @@ export const sendMessage = async (req, res) => {
             receiverId,
             text,
             image: imageUrl,
+            forwarded: !!forwarded,
+            replyTo: replyTo || null,
         });
 
         await newMessage.save();
 
-        //
+        const populatedMessage = await populateMessageDetails(newMessage);
+
         const receiverSocketId = getReceiverSocketId(receiverId)
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit("newMessage", newMessage)
+            io.to(receiverSocketId).emit("newMessage", populatedMessage)
         }
 
-        res.status(201).json(newMessage);
+        res.status(201).json(populatedMessage);
     } catch (error) {
         console.log("Error in sendMessage controller", error.message);
         res.status(500).json({ error: "Internal Server Error" });
@@ -105,10 +112,16 @@ const notifyConversationPartners = (message, payload, event, excludeUserId) => {
     }
 };
 
-const populateMessageIfGroup = async (message) => {
-    return message.groupId
-        ? Message.findById(message._id).populate("senderId", "fullName profilePic")
-        : Message.findById(message._id);
+const populateMessageDetails = async (message) => {
+    let query = Message.findById(message._id);
+    if (message.groupId) {
+        query = query.populate("senderId", "fullName profilePic");
+    }
+    return query.populate({
+        path: "replyTo",
+        select: "text image senderId deletedForEveryone",
+        populate: { path: "senderId", select: "fullName" },
+    });
 };
 
 export const editMessage = async (req, res) => {
@@ -146,7 +159,7 @@ export const editMessage = async (req, res) => {
         message.edited = true;
         await message.save();
 
-        const updatedMessage = await populateMessageIfGroup(message);
+        const updatedMessage = await populateMessageDetails(message);
 
         notifyConversationPartners(message, updatedMessage, "messageEdited", userId);
 
@@ -189,7 +202,7 @@ export const deleteMessage = async (req, res) => {
             message.deletedForEveryone = true;
             await message.save();
 
-            const updatedMessage = await populateMessageIfGroup(message);
+            const updatedMessage = await populateMessageDetails(message);
 
             notifyConversationPartners(message, updatedMessage, "messageDeleted", userId);
 
@@ -217,6 +230,156 @@ export const deleteMessage = async (req, res) => {
         });
     } catch (error) {
         console.error("Error in deleteMessage controller:", error.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const reactToMessage = async (req, res) => {
+    try {
+        const { id: messageId } = req.params;
+        const { emoji } = req.body;
+        const userId = req.user._id;
+
+        if (!emoji || !emoji.trim()) {
+            return res.status(400).json({ message: "Emoji is required." });
+        }
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+            return res.status(404).json({ message: "Message not found." });
+        }
+
+        if (message.deletedForEveryone) {
+            return res.status(400).json({ message: "Cannot react to a deleted message." });
+        }
+
+        // only participants can react
+        if (message.groupId) {
+            const group = await Group.findById(message.groupId);
+            if (!group || !group.members.some((m) => m.toString() === userId.toString())) {
+                return res.status(403).json({ message: "You are not a member of this group." });
+            }
+            message.members = group.members;
+        } else {
+            const isParticipant = message.senderId.equals(userId) || message.receiverId?.equals(userId);
+            if (!isParticipant) {
+                return res.status(403).json({ message: "You are not part of this conversation." });
+            }
+        }
+
+        const reactions = message.reactions || [];
+        const existingIndex = reactions.findIndex((r) => r.userId?.toString() === userId.toString());
+
+        if (existingIndex !== -1) {
+            if (reactions[existingIndex].emoji === emoji) {
+                reactions.splice(existingIndex, 1); // toggle off
+            } else {
+                reactions[existingIndex].emoji = emoji; // switch reaction
+            }
+        } else {
+            reactions.push({ emoji, userId });
+        }
+
+        message.reactions = reactions;
+        await message.save();
+
+        const updatedMessage = await populateMessageDetails(message);
+
+        notifyConversationPartners(message, updatedMessage, "messageReaction", userId);
+
+        res.status(200).json(updatedMessage);
+    } catch (error) {
+        console.error("Error in reactToMessage controller:", error.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const searchMessages = async (req, res) => {
+    try {
+        const { q } = req.query;
+        const userId = req.user._id;
+
+        if (!q || !q.trim()) {
+            return res.status(400).json({ message: "Search query is required." });
+        }
+
+        const userGroups = await Group.find({ members: userId }).select("_id");
+        const groupIds = userGroups.map((g) => g._id);
+
+        const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        const messages = await Message.find({
+            text: { $regex: escaped, $options: "i" },
+            deletedForEveryone: false,
+            $or: [
+                { groupId: { $in: groupIds } },
+                { senderId: userId, receiverId: { $ne: null } },
+                { receiverId: userId },
+            ],
+        })
+            .sort({ createdAt: -1 })
+            .limit(50)
+            .populate("senderId", "fullName profilePic")
+            .populate({
+                path: "replyTo",
+                select: "text image senderId deletedForEveryone",
+                populate: { path: "senderId", select: "fullName" },
+            });
+
+        const groupMap = {};
+        if (groupIds.length) {
+            const groups = await Group.find({ _id: { $in: groupIds } }).select("name");
+            groups.forEach((g) => (groupMap[g._id.toString()] = g));
+        }
+
+        const otherIds = [
+            ...new Set(
+                messages
+                    .filter((m) => !m.groupId)
+                    .flatMap((m) => {
+                        const senderId = m.senderId?._id ?? m.senderId;
+                        return [senderId, m.receiverId];
+                    })
+                    .filter((id) => id && id.toString() !== userId.toString())
+                    .map((id) => id.toString())
+            ),
+        ];
+
+        const userMap = {};
+        if (otherIds.length) {
+            const users = await User.find({ _id: { $in: otherIds } }).select("fullName profilePic");
+            users.forEach((u) => (userMap[u._id.toString()] = u));
+        }
+
+        const results = messages.map((m) => {
+            const isGroup = !!m.groupId;
+            const senderId = m.senderId?._id ?? m.senderId;
+            const otherId = isGroup
+                ? null
+                : senderId.toString() === userId.toString()
+                    ? m.receiverId?.toString()
+                    : senderId.toString();
+            const other = otherId ? userMap[otherId] : null;
+            const group = isGroup ? groupMap[m.groupId.toString()] : null;
+
+            return {
+                _id: m._id.toString(),
+                text: m.text,
+                image: m.image,
+                createdAt: m.createdAt,
+                type: isGroup ? "group" : "dm",
+                groupId: isGroup ? m.groupId.toString() : null,
+                groupName: isGroup ? group?.name || "Group" : null,
+                otherUserId: isGroup ? null : otherId,
+                otherFullName: isGroup ? null : other?.fullName || "Unknown",
+                otherProfilePic: isGroup ? null : other?.profilePic || null,
+                senderName: m.senderId?.fullName || (senderId.toString() === userId.toString() ? "You" : "Unknown"),
+            };
+        });
+
+        res.status(200).json(results);
+    } catch (error) {
+        console.error("Error in searchMessages controller:", error.message);
         res.status(500).json({ error: "Internal Server Error" });
     }
 };

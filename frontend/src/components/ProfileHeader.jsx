@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { LogOutIcon, VolumeOffIcon, Volume2Icon } from "lucide-react";
+import { LogOutIcon, VolumeOffIcon, Volume2Icon, SearchIcon } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 
@@ -8,7 +8,7 @@ const mouseClickSound = new Audio("/sounds/mouse-click.mp3");
 function ProfileHeader() {
   const {logout, authUser, updateProfile, onlineUsers} = useAuthStore();
   const isOnline = onlineUsers.includes(authUser?._id);
-  const {isSoundEnabled, toggleSound} = useChatStore();
+  const {isSoundEnabled, toggleSound, setSearchOpen} = useChatStore();
   const [selectedImg, setSelectedImg] = useState(null);
 
   const fileInputRef = useRef(null);
@@ -91,6 +91,15 @@ function ProfileHeader() {
 
         {/* Buttons */}
         <div className="flex gap-1 items-center">
+          {/* Search button */}
+          <button
+            className="p-2 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-white/10 transition-colors"
+            onClick={() => setSearchOpen(true)}
+            title="Search messages"
+          >
+            <SearchIcon className="size-4.5" />
+          </button>
+
           {/* Sound toggle button */}
           <button
             className="p-2 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-white/10 transition-colors"

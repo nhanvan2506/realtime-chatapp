@@ -1,5 +1,5 @@
 import express from 'express';
-import {getAllContacts, getMessagesByUserId, sendMessage, getChatPartners, getChatThemes, setChatTheme, markMessagesAsRead, editMessage, deleteMessage} from '../controllers/message.controller.js';
+import {getAllContacts, getMessagesByUserId, sendMessage, getChatPartners, getChatThemes, setChatTheme, markMessagesAsRead, editMessage, deleteMessage, reactToMessage, searchMessages} from '../controllers/message.controller.js';
 import {createGroup, getMyGroups, getGroupMessages, sendGroupMessage, markGroupMessagesAsRead} from '../controllers/group.controller.js';
 import { protectedRoute } from '../middleware/auth.middleware.js';
 import {arcjetProtection} from '../middleware/arcjet.middleware.js'
@@ -12,6 +12,7 @@ router.get("/chats", getChatPartners);
 router.get("/themes", getChatThemes);
 router.put("/theme/:id", setChatTheme);
 router.get("/read/:id", markMessagesAsRead);
+router.get("/search", searchMessages);
 
 router.post("/groups", createGroup);
 router.get("/groups", getMyGroups);
@@ -22,6 +23,7 @@ router.post("/groups/:groupId/send", sendGroupMessage);
 router.get("/:id", getMessagesByUserId);
 router.post("/send/:id", sendMessage);
 router.put("/:id", editMessage);
+router.put("/:id/reaction", reactToMessage);
 router.delete("/:id", deleteMessage);
 
 export default router;

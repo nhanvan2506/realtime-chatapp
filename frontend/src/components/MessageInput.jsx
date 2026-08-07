@@ -12,8 +12,8 @@ const TYPING_STOP_DELAY = 2500;
 function MessageInput() {
 
   const {playRandomKeyStrokeSound} = useKeyboardSound();
-  const {sendMessages, sendGroupMessage, selectedGroup, selectedUser, isSoundEnabled, editingMessage, setEditingMessage, editMessage} = useChatStore();
-  const { socket } = useAuthStore();
+  const {sendMessages, sendGroupMessage, selectedGroup, selectedUser, isSoundEnabled, editingMessage, setEditingMessage, editMessage, replyTo, setReplyTo} = useChatStore();
+  const { socket, authUser } = useAuthStore();
 
   // MessageInput is remounted with a key when editingMessage changes, so the
   // initial text always reflects the message being edited.
@@ -121,6 +121,15 @@ function MessageInput() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  const replyToName = (() => {
+    if (!replyTo) return "";
+    const senderId = replyTo.senderId?._id ?? replyTo.senderId;
+    if (senderId?.toString() === authUser?._id) return "You";
+    if (replyTo.senderId?.fullName) return replyTo.senderId.fullName;
+    if (!selectedGroup && senderId?.toString() === selectedUser?._id) return selectedUser?.fullName || "Someone";
+    return "Someone";
+  })();
+
   return (
     <div className='p-4 border-t border-slate-700/50'>
       {imagePreview && (
@@ -139,6 +148,29 @@ function MessageInput() {
               <XIcon className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {!editingMessage && replyTo && (
+        <div className="max-w-3xl mx-auto mb-3 flex items-center gap-2 bg-slate-700/40 border border-slate-600/50 rounded-lg px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-cyan-400 truncate">
+              Replying to {replyToName}
+            </p>
+            <p className="text-sm text-slate-300 truncate">
+              {replyTo.deletedForEveryone
+                ? "This message was deleted"
+                : (replyTo.text || "[Image]")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyTo(null)}
+            className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+            title="Cancel reply"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
         </div>
       )}
 

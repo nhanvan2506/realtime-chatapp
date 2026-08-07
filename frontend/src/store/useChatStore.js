@@ -25,6 +25,14 @@ export const useChatStore = create((set, get) => ({
     typingGroupId: null,
     editingMessage: null,
     deleteMenuId: null,
+    replyTo: null,
+    forwardMessage: null,
+    searchOpen: false,
+    searchResults: [],
+    isSearching: false,
+    pendingMessageId: null,
+    highlightedMessageId: null,
+    reactionPickerId: null,
 
     toggleSound: () => {
         localStorage.setItem("isSoundEnabled", !get().isSoundEnabled)
@@ -37,6 +45,12 @@ export const useChatStore = create((set, get) => ({
 
     setEditingMessage: (message) => set({ editingMessage: message }),
     setDeleteMenuId: (deleteMenuId) => set({ deleteMenuId }),
+    setReplyTo: (replyTo) => set({ replyTo }),
+    setForwardMessage: (forwardMessage) => set({ forwardMessage }),
+    setSearchOpen: (searchOpen) => set({ searchOpen }),
+    setPendingMessageId: (pendingMessageId) => set({ pendingMessageId }),
+    setHighlightedMessageId: (highlightedMessageId) => set({ highlightedMessageId }),
+    setReactionPickerId: (reactionPickerId) => set({ reactionPickerId }),
 
     getMyGroups: async () => {
         set({ isGroupsLoading: true });
@@ -66,7 +80,7 @@ export const useChatStore = create((set, get) => ({
         set({ isGroupMessagesLoading: true });
         try {
             const res = await axiosInstance.get(`/messages/groups/${groupId}`);
-            set({ groupMessages: res.data, editingMessage: null, deleteMenuId: null });
+            set({ groupMessages: res.data, editingMessage: null, deleteMenuId: null, reactionPickerId: null });
         } catch (error) {
             toast.error(error.response?.data?.message || "Failed to load group messages");
         } finally {
@@ -75,7 +89,7 @@ export const useChatStore = create((set, get) => ({
     },
 
     sendGroupMessage: async (messageData) => {
-        const { selectedGroup } = get();
+        const { selectedGroup, replyTo } = get();
         const { authUser } = useAuthStore.getState();
 
         const tempId = `temp-${Date.now()}`
@@ -90,10 +104,13 @@ export const useChatStore = create((set, get) => ({
             isOptimistic: true,
         };
 
-        set({ groupMessages: [...get().groupMessages, optimisticMessage] })
+        set({ groupMessages: [...get().groupMessages, optimisticMessage], replyTo: null })
 
         try {
-            const res = await axiosInstance.post(`/messages/groups/${selectedGroup._id}/send`, messageData);
+            const res = await axiosInstance.post(`/messages/groups/${selectedGroup._id}/send`, {
+                ...messageData,
+                replyTo: replyTo?._id,
+            });
             set({ groupMessages: get().groupMessages.map(m => m._id === tempId ? res.data : m) });
         } catch (error) {
             set({ groupMessages: get().groupMessages.filter(m => m._id !== tempId) });
@@ -295,7 +312,7 @@ export const useChatStore = create((set, get) => ({
         set({ isMessagesLoading: true });
         try {
             const res = await axiosInstance.get(`/messages/${userId}`);
-            set({ messages: res.data, editingMessage: null, deleteMenuId: null });
+            set({ messages: res.data, editingMessage: null, deleteMenuId: null, reactionPickerId: null });
         } catch (error) {
             toast.error(error.response?.data?.message || "Something wrong");
         } finally {
@@ -304,7 +321,7 @@ export const useChatStore = create((set, get) => ({
     },
 
     sendMessages: async (messageData) => {
-        const { selectedUser } = get();
+        const { selectedUser, replyTo } = get();
         const { authUser } = useAuthStore.getState();
 
         const tempId = `temp-${Date.now()}`
@@ -319,10 +336,13 @@ export const useChatStore = create((set, get) => ({
             isOptimistic: true,
         };
 
-        set({ messages: [...get().messages, optimisticMessage] })
+        set({ messages: [...get().messages, optimisticMessage], replyTo: null })
 
         try {
-            const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
+            const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, {
+                ...messageData,
+                replyTo: replyTo?._id,
+            });
             set({ messages: get().messages.map(m => m._id === tempId ? res.data : m) });
             get().getMyChatPartners();
         } catch (error) {
@@ -366,6 +386,88 @@ export const useChatStore = create((set, get) => ({
             }
         } catch (error) {
             toast.error(error.response?.data?.message || "Failed to delete message");
+        }
+    },
+
+    reactToMessage: async (messageId, emoji) => {
+        try {
+            const res = await axiosInstance.put(`/messages/${messageId}/reaction`, { emoji });
+            const updated = res.data;
+
+            if (get().selectedGroup) {
+                set({ groupMessages: get().groupMessages.map((m) => (m._id === messageId ? updated : m)) });
+            } else {
+                set({ messages: get().messages.map((m) => (m._id === messageId ? updated : m)) });
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to react to message");
+        }
+    },
+
+    searchMessages: async (query) => {
+        const trimmed = (query || "").trim();
+        if (!trimmed) {
+            set({ searchResults: [], isSearching: false });
+            return;
+        }
+
+        set({ isSearching: true });
+        try {
+            const res = await axiosInstance.get(`/messages/search`, { params: { q: trimmed } });
+            set({ searchResults: res.data });
+        } catch (error) {
+            set({ searchResults: [] });
+            toast.error(error.response?.data?.message || "Failed to search messages");
+        } finally {
+            set({ isSearching: false });
+        }
+    },
+
+    openChatFromSearch: async (result) => {
+        set({ searchOpen: false, searchResults: [] });
+
+        if (result.type === "group") {
+            let group = get().groups.find((g) => g._id === result.groupId);
+            if (!group) {
+                await get().getMyGroups();
+                group = get().groups.find((g) => g._id === result.groupId);
+            }
+            if (group) {
+                get().setSelectedGroup(group);
+                get().setActiveTab("groups");
+                set({ pendingMessageId: result._id });
+            } else {
+                toast.error("Group not found");
+            }
+        } else {
+            get().setSelectedUser({
+                _id: result.otherUserId,
+                fullName: result.otherFullName,
+                profilePic: result.otherProfilePic,
+            });
+            get().setActiveTab("chats");
+            set({ pendingMessageId: result._id });
+        }
+    },
+
+    forwardMessageTo: async (message, target) => {
+        try {
+            const payload = {
+                text: message.text || undefined,
+                image: message.image || undefined,
+                forwarded: true,
+            };
+
+            if (target.type === "group") {
+                await axiosInstance.post(`/messages/groups/${target._id}/send`, payload);
+            } else {
+                await axiosInstance.post(`/messages/send/${target._id}`, payload);
+            }
+
+            set({ forwardMessage: null });
+            toast.success("Message forwarded");
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to forward message");
         }
     },
 
@@ -450,6 +552,34 @@ export const useChatStore = create((set, get) => ({
     unsubscribeFromMessageDeletes: () => {
         const socket = useAuthStore.getState().socket;
         if (socket) socket.off("messageDeleted");
+    },
+
+    subscribeToMessageReactions: () => {
+        const socket = useAuthStore.getState().socket;
+        if (!socket) return;
+
+        socket.off("messageReaction");
+        socket.on("messageReaction", (updatedMessage) => {
+            const { selectedUser, selectedGroup, messages, groupMessages } = get();
+
+            if (updatedMessage.groupId) {
+                if (selectedGroup && updatedMessage.groupId === selectedGroup._id) {
+                    set({ groupMessages: groupMessages.map((m) => (m._id === updatedMessage._id ? updatedMessage : m)) });
+                }
+            } else if (selectedUser) {
+                const isRelevant =
+                    updatedMessage.senderId?.toString() === selectedUser._id?.toString() ||
+                    updatedMessage.receiverId?.toString() === selectedUser._id?.toString();
+                if (isRelevant) {
+                    set({ messages: messages.map((m) => (m._id === updatedMessage._id ? updatedMessage : m)) });
+                }
+            }
+        });
+    },
+
+    unsubscribeFromMessageReactions: () => {
+        const socket = useAuthStore.getState().socket;
+        if (socket) socket.off("messageReaction");
     },
 
 }));

@@ -72,6 +72,11 @@ export const getGroupMessages = async (req, res) => {
 
         const messages = await Message.find({ groupId })
             .populate("senderId", "fullName profilePic")
+            .populate({
+                path: "replyTo",
+                select: "text image senderId deletedForEveryone",
+                populate: { path: "senderId", select: "fullName" },
+            })
             .sort({ createdAt: 1 });
 
         res.status(200).json(messages);
@@ -134,7 +139,7 @@ export const markGroupMessagesAsRead = async (req, res) => {
 export const sendGroupMessage = async (req, res) => {
     try {
         const { groupId } = req.params;
-        const { text, image } = req.body;
+        const { text, image, forwarded, replyTo } = req.body;
         const senderId = req.user._id;
 
         if (!text && !image) {
@@ -163,10 +168,18 @@ export const sendGroupMessage = async (req, res) => {
             groupId,
             text,
             image: imageUrl,
+            forwarded: !!forwarded,
+            replyTo: replyTo || null,
         });
         await newMessage.save();
 
-        const populatedMessage = await Message.findById(newMessage._id).populate("senderId", "fullName profilePic");
+        const populatedMessage = await Message.findById(newMessage._id)
+            .populate("senderId", "fullName profilePic")
+            .populate({
+                path: "replyTo",
+                select: "text image senderId deletedForEveryone",
+                populate: { path: "senderId", select: "fullName" },
+            });
 
         // emit to all online group members except the sender
         for (const memberId of group.members) {
